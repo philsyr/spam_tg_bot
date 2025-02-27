@@ -13,10 +13,7 @@ public class BotConfig {
     @Bean
     public TelegramBotsApi telegramBotsApi() {
         try {
-            // Initialize TelegramBotsApi without needing BotSession
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-
-            // botsApi.registerBot(new AntiSpamTelegramBot());
 
             return botsApi;
         } catch (TelegramApiException e) {
