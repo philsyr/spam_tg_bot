@@ -1,44 +1,90 @@
 package com.example.anti_spam_telegram_bot;
 
-import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import reactor.core.publisher.Mono;
 
-@Service
+import java.util.Map;
+
+@Component
 public class AntiSpamTelegramBot extends TelegramLongPollingBot {
 
-	private final String BOT_USERNAME = "anti_spam_tg_channels_bot";  // Replace with your bot username
-	private final String BOT_TOKEN = "7753305953:AAEFJcit9w62W9YAjaDqGhnM_5Ewcqz1gc8";  // Replace with your bot token
+	private final String botUsername;
+	private final String botToken;
+	private final WebClient webClient;
+
+	public AntiSpamTelegramBot(
+			@Value("${bot.name}") String botUsername,
+			@Value("${bot.token}") String botToken,
+			@Value("${model.service.url:http://127.0.0.1:8001}") String serviceUrl
+	) {
+		this.botUsername = botUsername;
+		this.botToken = botToken;
+		this.webClient = WebClient.create(serviceUrl);
+	}
 
 	@Override
 	public void onUpdateReceived(Update update) {
-		// Check if the update contains a message
-		if (update.hasMessage()) {
-			Message message = update.getMessage();
+		if (!update.hasMessage()) {
+			return;
+		}
 
-			// Create a SendMessage object to reply to the message
+		Message message = update.getMessage();
+
+		if (!message.hasText()) {
+			return;
+		}
+
+		String text = message.getText();
+
+		try {
+			// Проверяем на спам
+			Map result = checkSpam(text).block();
+			boolean isSpam = (Boolean) result.get("spam");
+
 			SendMessage response = new SendMessage();
-			response.setChatId(message.getChatId().toString());  // Make sure to pass the chat ID
-			response.setText("Hello, " + message.getFrom().getFirstName() + "! You said: " + message.getText());
+			response.setChatId(message.getChatId().toString());
 
+			if (isSpam) {
+				response.setText("Обнаружен спам! Сообщение: " + text);
+			} else {
+				response.setText("Hello, " + message.getFrom().getFirstName() + "! You said: " + text);
+			}
+
+			execute(response);
+		} catch (Exception e) {
+			// В случае ошибки, просто отвечаем как обычно
+			SendMessage response = new SendMessage();
+			response.setChatId(message.getChatId().toString());
+			response.setText("Hello, " + message.getFrom().getFirstName() + "! You said: " + text + " (ошибка проверки спама)");
 			try {
-				// Execute the message
-				execute(response);  // Sending the response to the user
-			} catch (Exception e) {
-				e.printStackTrace();
+				execute(response);
+			} catch (Exception ex) {
+				ex.printStackTrace();
 			}
 		}
 	}
 
+	private Mono<Map> checkSpam(String text) {
+		return webClient.post()
+			.uri("/predict")
+			.bodyValue(Map.of("text", text))
+			.retrieve()
+			.bodyToMono(Map.class);
+	}
+
 	@Override
 	public String getBotUsername() {
-		return BOT_USERNAME;
+		return botUsername;
 	}
 
 	@Override
 	public String getBotToken() {
-		return BOT_TOKEN;
+		return botToken;
 	}
 }
