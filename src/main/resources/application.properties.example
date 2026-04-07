@@ -1,0 +1,4 @@
+spring.application.name=anti-spam-telegram-bot
+bot.name=anti_spam_telegram_bot
+bot.token=${BOT_TOKEN}
+model.service.url=http://127.0.0.1:8001
